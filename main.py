@@ -9,10 +9,11 @@ from gtts import gTTS
 from googletrans import Translator
 from datetime import datetime
 from googlesearch import search
-from pyzbar.pyzbar import decode
-from server import SERVER
+from io import BytesIO
 from telebot import types
 import qrcode
+import numpy as np
+import cv2
 import speedtest
 import moviepy.editor
 import threading
@@ -20,6 +21,7 @@ import time
 import telebot
 import os
 import math
+from server import SERVER
 TOKEN = "7113724596:AAE4yYczuklB_raJ2pi4vObn7BzCUpO9YwE"
 bot = telebot.TeleBot(TOKEN)
 user_data = {}
@@ -525,15 +527,12 @@ zaidmakzoom@gmail.com
         
         
     def read_qr(message):
-            file_info = bot.get_file(message.photo[-1].file_id)
-            downloaded_file = bot.download_file(file_info.file_path)
-            with open(f"./qr/{message.from_user.id}.png", 'wb') as new_file:
-                new_file.write(downloaded_file)
-            qr_content = read_qr_qr(f"./qr/{message.from_user.id}.png")
-            if qr_content:
-                bot.send_message(message.chat.id, "تم قراءة محتوى QR Code:")
-                bot.send_message(message.chat.id, f"\n{qr_content}")
-                os.remove(f"./qr/{message.from_user.id}.png")
+            try:    
+                file_info = bot.get_file(message.photo[-1].file_id)
+                downloaded_file = bot.download_file(file_info.file_path)
+                result = read_qr_qr(downloaded_file)
+                bot.reply_to(message, "تم العثور على البيانات.")
+                bot.send_message(message.chat.id,result)
                 markmake = InlineKeyboardMarkup()
                 markmake.add(InlineKeyboardButton("تجربة إنشاء QR ✏️",callback_data="make"))
                 markmake.add(InlineKeyboardButton("إلغاء ❌",callback_data="cancel"))
@@ -544,15 +543,27 @@ zaidmakzoom@gmail.com
 🚩 ID: {message.from_user.id}
 🚩 User Name: {message.from_user.username}
 🚩 Status: True ✅""")
-            else:
-                bot.send_message(message.chat.id, "لم أتمكن من قراءة QR Code من الصورة.")
-    def read_qr_qr(image_path):
+            except Exception as e:
+                print(f"Error on [READ QR] ({e})")
+                bot.send_message(message.chat.id,"""للاسف ☹️
+    حدث خطأ ما ❌
+    الرجاء المحاولة لاحقا 🔄""")
+                bot.send_message(ADMIN_ID,f"""🏆 READ QR 🏆
+    🚩 Name: {message.from_user.first_name}
+    🚩 ID: {message.from_user.id}
+    🚩 User Name: {message.from_user.username}
+    🚩 Status: Valid ❌""")
+    def read_qr_qr(image_bytes):
         try:
-            img = Image.open(image_path)
-            decoded_objects = decode(img)
-            if decoded_objects:
-                return decoded_objects[0].data.decode('utf-8')
-            return None
+            image = Image.open(BytesIO(image_bytes))
+            image = np.array(image)
+            gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+            detector = cv2.QRCodeDetector()
+            value, points, straight_qrcode = detector.detectAndDecode(gray)
+            if value:
+                return f"{value}"
+            else:
+                return "لم يتم العثور على QR code"
         except Exception as e:
             print(f"Error reading QR code: {e}")
         return None
